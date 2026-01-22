@@ -5,13 +5,14 @@ import { StatCard } from '@/components/StatCard';
 import { ServerCard } from '@/components/ServerCard';
 import { ServerTable } from '@/components/ServerTable';
 import { ServerDetailPanel } from '@/components/ServerDetailPanel';
-import { mockServers } from '@/data/mockServers';
+import { ConnectionsPanel } from '@/components/ConnectionsPanel';
+import { useServerPolling } from '@/hooks/useServerPolling';
 import { Server } from '@/types/server';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Server as ServerIcon, Cpu, Thermometer, Zap, 
-  AlertTriangle, LayoutGrid, List 
+  AlertTriangle, LayoutGrid, List, Wifi, WifiOff 
 } from 'lucide-react';
 
 const Index = () => {
@@ -20,39 +21,69 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
+  const {
+    servers,
+    liveServers,
+    connections,
+    isPolling,
+    errors,
+    addConnection,
+    updateConnection,
+    removeConnection,
+    refreshAll,
+    refreshOne,
+    testConnection,
+  } = useServerPolling({ includeMockData: true });
+
   const filteredServers = useMemo(() => {
-    if (!searchQuery) return mockServers;
+    if (!searchQuery) return servers;
     const query = searchQuery.toLowerCase();
-    return mockServers.filter(
+    return servers.filter(
       (s) =>
         s.hostname.toLowerCase().includes(query) ||
         s.ipmiIp.includes(query) ||
         s.tags.some((t) => t.toLowerCase().includes(query))
     );
-  }, [searchQuery]);
+  }, [searchQuery, servers]);
 
   const stats = useMemo(() => {
-    const online = mockServers.filter((s) => s.status === 'online').length;
-    const warnings = mockServers.filter((s) => s.status === 'warning').length;
-    const offline = mockServers.filter((s) => s.status === 'offline').length;
-    const totalPower = mockServers.reduce((acc, s) => acc + s.metrics.powerConsumption, 0);
-    const avgTemp = mockServers.filter((s) => s.metrics.temperature > 0)
-      .reduce((acc, s, _, arr) => acc + s.metrics.temperature / arr.length, 0);
-    const avgCpu = mockServers.filter((s) => s.metrics.cpuUsage > 0)
-      .reduce((acc, s, _, arr) => acc + s.metrics.cpuUsage / arr.length, 0);
+    const online = servers.filter((s) => s.status === 'online').length;
+    const warnings = servers.filter((s) => s.status === 'warning').length;
+    const offline = servers.filter((s) => s.status === 'offline').length;
+    const totalPower = servers.reduce((acc, s) => acc + s.metrics.powerConsumption, 0);
+    const activeServers = servers.filter((s) => s.metrics.temperature > 0);
+    const avgTemp = activeServers.length > 0
+      ? activeServers.reduce((acc, s) => acc + s.metrics.temperature, 0) / activeServers.length
+      : 0;
+    const cpuServers = servers.filter((s) => s.metrics.cpuUsage > 0);
+    const avgCpu = cpuServers.length > 0
+      ? cpuServers.reduce((acc, s) => acc + s.metrics.cpuUsage, 0) / cpuServers.length
+      : 0;
 
     return { online, warnings, offline, totalPower, avgTemp: Math.round(avgTemp), avgCpu: Math.round(avgCpu) };
-  }, []);
+  }, [servers]);
+
+  const handleRefresh = () => {
+    if (connections.length > 0) {
+      refreshAll();
+    }
+    console.log('Refreshing...');
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
-      <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      <Sidebar 
+        activeView={activeView} 
+        onViewChange={setActiveView}
+        connectionCount={connections.length}
+        liveServerCount={liveServers.length}
+      />
       
       <div className="flex-1 flex flex-col">
         <Header 
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
-          onRefresh={() => console.log('Refreshing...')}
+          onRefresh={handleRefresh}
         />
 
         <main className="flex-1 flex">
@@ -63,7 +94,7 @@ const Index = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
                   <StatCard 
                     label="Total Servers" 
-                    value={mockServers.length}
+                    value={servers.length}
                     icon={<ServerIcon className="w-5 h-5" />}
                   />
                   <StatCard 
@@ -92,6 +123,19 @@ const Index = () => {
                     icon={<Zap className="w-5 h-5" />}
                   />
                 </div>
+
+                {/* Live Servers Indicator */}
+                {liveServers.length > 0 && (
+                  <div className="flex items-center gap-2 mb-4 text-sm">
+                    <Wifi className="w-4 h-4 text-[hsl(var(--server-online))]" />
+                    <span className="text-[hsl(var(--server-online))]">
+                      {liveServers.length} live server{liveServers.length !== 1 ? 's' : ''} connected
+                    </span>
+                    {isPolling && (
+                      <span className="text-muted-foreground animate-pulse">• Polling...</span>
+                    )}
+                  </div>
+                )}
 
                 {/* View Controls */}
                 <div className="flex items-center justify-between mb-6">
@@ -145,7 +189,21 @@ const Index = () => {
               </div>
             )}
 
-            {activeView !== 'dashboard' && activeView !== 'servers' && (
+            {activeView === 'connections' && (
+              <ConnectionsPanel
+                connections={connections}
+                errors={errors}
+                isPolling={isPolling}
+                onAdd={addConnection}
+                onUpdate={updateConnection}
+                onRemove={removeConnection}
+                onRefresh={refreshOne}
+                onRefreshAll={refreshAll}
+                onTest={testConnection}
+              />
+            )}
+
+            {activeView !== 'dashboard' && activeView !== 'servers' && activeView !== 'connections' && (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <div className="p-4 bg-muted rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
