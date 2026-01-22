@@ -1,5 +1,7 @@
 # Stage 1: Build the application
-FROM node:20-alpine AS builder
+# Use a glibc-based image (not Alpine/musl) because the lockfile includes @esbuild/linux-x64
+# and does not include the musl variant; this can cause `npm ci` to fail on Alpine.
+FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
