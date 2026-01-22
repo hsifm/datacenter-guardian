@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  datacenter-inventory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: datacenter-inventory:latest
+    container_name: dc-inventory
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    networks:
+      - dc-network
+    # Uncomment below to add a CORS proxy for Redfish API calls
+    # depends_on:
+    #   - redfish-proxy
+
+  # Optional: CORS proxy for Redfish/IPMI endpoints
+  # Uncomment this section if you need to proxy API calls
+  # redfish-proxy:
+  #   image: datacenter-inventory-proxy:latest
+  #   build:
+  #     context: ./proxy
+  #     dockerfile: Dockerfile
+  #   container_name: dc-redfish-proxy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3001:3001"
+  #   networks:
+  #     - dc-network
+  #   environment:
+  #     - NODE_ENV=production
+
+networks:
+  dc-network:
+    driver: bridge
