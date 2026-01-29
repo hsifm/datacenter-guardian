@@ -12,6 +12,26 @@ import {
 } from '@/types/redfish';
 import { Server, ServerStatus } from '@/types/server';
 
+// Configuration for the CORS proxy
+const PROXY_CONFIG = {
+  // When running in Docker, use the proxy container
+  // When running locally for development, you can use localhost
+  proxyUrl: localStorage.getItem('redfishProxyUrl') || 'http://localhost:8443',
+  enabled: localStorage.getItem('redfishProxyEnabled') !== 'false', // enabled by default
+};
+
+// Helper to configure proxy settings
+export function configureProxy(proxyUrl: string, enabled: boolean = true) {
+  localStorage.setItem('redfishProxyUrl', proxyUrl);
+  localStorage.setItem('redfishProxyEnabled', String(enabled));
+  PROXY_CONFIG.proxyUrl = proxyUrl;
+  PROXY_CONFIG.enabled = enabled;
+}
+
+export function getProxyConfig() {
+  return { ...PROXY_CONFIG };
+}
+
 class RedfishClient {
   private connection: ServerConnection;
   private baseUrl: string;
@@ -24,15 +44,28 @@ class RedfishClient {
   }
 
   private async fetch<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const headers: Record<string, string> = {
+      'Authorization': this.authHeader,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    let url: string;
+
+    if (PROXY_CONFIG.enabled) {
+      // Use the CORS proxy
+      url = `${PROXY_CONFIG.proxyUrl}${path}`;
+      headers['X-Target-Host'] = this.connection.host;
+      headers['X-Target-Port'] = String(this.connection.port);
+      headers['X-Target-Protocol'] = this.connection.protocol;
+    } else {
+      // Direct connection (only works if BMC has CORS configured)
+      url = `${this.baseUrl}${path}`;
+    }
+
+    const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Authorization': this.authHeader,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      // For self-signed certs in development/internal networks
-      // Note: This requires proper CORS configuration on the BMC
+      headers,
     });
 
     if (!response.ok) {
@@ -108,13 +141,27 @@ class RedfishClient {
   }
 
   private async postAction(systemId: string, resetType: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/redfish/v1/Systems/${systemId}/Actions/ComputerSystem.Reset`, {
+    const path = `/redfish/v1/Systems/${systemId}/Actions/ComputerSystem.Reset`;
+    const headers: Record<string, string> = {
+      'Authorization': this.authHeader,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    let url: string;
+
+    if (PROXY_CONFIG.enabled) {
+      url = `${PROXY_CONFIG.proxyUrl}${path}`;
+      headers['X-Target-Host'] = this.connection.host;
+      headers['X-Target-Port'] = String(this.connection.port);
+      headers['X-Target-Protocol'] = this.connection.protocol;
+    } else {
+      url = `${this.baseUrl}${path}`;
+    }
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Authorization': this.authHeader,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ ResetType: resetType }),
     });
 
