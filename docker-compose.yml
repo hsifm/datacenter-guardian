@@ -1,7 +1,8 @@
 version: '3.8'
 
 services:
-  datacenter-inventory:
+  # Main datacenter inventory application
+  app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,27 +11,35 @@ services:
     restart: unless-stopped
     ports:
       - "8080:80"
+    depends_on:
+      - redfish-proxy
     networks:
       - dc-network
-    # Uncomment below to add a CORS proxy for Redfish API calls
-    # depends_on:
-    #   - redfish-proxy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  # Optional: CORS proxy for Redfish/IPMI endpoints
-  # Uncomment this section if you need to proxy API calls
-  # redfish-proxy:
-  #   image: datacenter-inventory-proxy:latest
-  #   build:
-  #     context: ./proxy
-  #     dockerfile: Dockerfile
-  #   container_name: dc-redfish-proxy
-  #   restart: unless-stopped
-  #   ports:
-  #     - "3001:3001"
-  #   networks:
-  #     - dc-network
-  #   environment:
-  #     - NODE_ENV=production
+  # CORS proxy for Redfish/iDRAC/iLO connections
+  redfish-proxy:
+    build:
+      context: ./redfish-proxy
+      dockerfile: Dockerfile
+    image: redfish-proxy:latest
+    container_name: redfish-proxy
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    networks:
+      - dc-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
 networks:
   dc-network:

@@ -11,50 +11,80 @@ This application is fully configured for deployment on air-gapped (offline) netw
 
 ---
 
-## Quick Start with Docker
+## Quick Start with Docker Compose (Recommended)
 
-### Option 1: Build on a machine with internet, transfer image
+This runs both the app and the Redfish CORS proxy together:
 
 ```bash
-# On a machine WITH internet access:
+# Build and start all services
+docker compose up -d --build
 
-# 1. Clone/download the project
+# View logs
+docker compose logs -f
+
+# Check status
+docker compose ps
+
+# Stop all services
+docker compose down
+```
+
+**Access points:**
+- **App:** http://localhost:8080
+- **Proxy:** http://localhost:8443
+
+**Configure proxy URL in your browser (once, after app loads):**
+```javascript
+localStorage.setItem('redfishProxyUrl', 'http://YOUR_HOST_IP:8443');
+```
+
+---
+
+## Air-Gapped Deployment
+
+### Step 1: Build images on a machine WITH internet
+
+```bash
+# Clone/download the project
 git clone <your-repo-url>
 cd datacenter-inventory
 
-# 2. Build the Docker image
-docker build -t datacenter-inventory:latest .
+# Build both images
+docker compose build
 
-# 3. Save the image to a tar file
+# Save images to tar files
 docker save datacenter-inventory:latest -o dc-inventory.tar
+docker save redfish-proxy:latest -o redfish-proxy.tar
 
-# 4. Transfer dc-inventory.tar to your air-gapped network (USB, etc.)
+# Transfer both .tar files to your air-gapped network (USB, etc.)
 ```
 
+### Step 2: Load and run on AIR-GAPPED network
+
 ```bash
-# On your AIR-GAPPED network:
-
-# 1. Load the image
+# Load the images
 docker load -i dc-inventory.tar
+docker load -i redfish-proxy.tar
 
-# 2. Run the container
+# Run using docker compose (if available)
+docker compose up -d
+
+# OR run manually:
+docker network create dc-network
+
+docker run -d \
+  --name redfish-proxy \
+  --restart unless-stopped \
+  --network dc-network \
+  -p 8443:8443 \
+  redfish-proxy:latest
+
 docker run -d \
   --name dc-inventory \
   --restart unless-stopped \
+  --network dc-network \
   -p 8080:80 \
   datacenter-inventory:latest
-
-# 3. Access at http://<server-ip>:8080
-```
-
-### Option 2: Use Docker Compose
-
-```bash
-# If you have docker-compose on your air-gapped network:
-
-# 1. Transfer the entire project folder
-# 2. Build and run:
-docker-compose up -d
 
 # Access at http://<server-ip>:8080
 ```
